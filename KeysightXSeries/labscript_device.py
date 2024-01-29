@@ -11,7 +11,7 @@
 #####################################################################
 import numpy as np
 
-from naqslab_devices import ScopeChannel, CounterScopeChannel
+from user_devices.naqslab_devices import ScopeChannel, CounterScopeChannel
 from labscript import Device, TriggerableDevice, config, LabscriptError, set_passed_properties
 
 __version__ = '0.1.0'
@@ -26,7 +26,7 @@ class KeysightXScope(TriggerableDevice):
                             "compression","compression_opts","shuffle"]}
         )
     def __init__(self, name, VISA_name, trigger_device, trigger_connection, 
-        num_AI=4, DI=True, trigger_duration=1e-3,
+        num_AI=4, DI=True, trigger_duration=100e-6,
         compression=None, compression_opts=None, shuffle=False, **kwargs):
         '''VISA_name can be full VISA connection string or NI-MAX alias.
         Trigger Device should be fast clocked device. 

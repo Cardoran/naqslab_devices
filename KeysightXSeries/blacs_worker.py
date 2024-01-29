@@ -10,20 +10,22 @@
 #                                                                   #
 #####################################################################
 import numpy as np
-from naqslab_devices.VISA.blacs_worker import VISAWorker
+from user_devices.naqslab_devices.VISA.blacs_worker import VISAWorker
 from labscript import LabscriptError
 import labscript_utils.properties
-
+import time
 import labscript_utils.h5_lock, h5py
 
 class KeysightXScopeWorker(VISAWorker):   
     # define instrument specific read and write strings
-    setup_string = '*ESE 60;*SRE 32;*CLS;:WAV:BYT MSBF;UNS ON;POIN:MODE RAW'
+    # setup_string = '*ESE 61;*SRE 32;*CLS;:WAV:BYT MSBF;UNS ON;POIN:MODE RAW; :ACQuire:TYPE AVERage; :ACQuire:COUNt 17'
+    setup_string = '*ESE 61;*SRE 32;*CLS;:ACQuire:TYPE NORM;:CHANnel1:DISPlay 1;:CHANnel2:DISPlay 1;:CHANnel3:DISPlay 1;:CHANnel4:DISPlay 1;:ACQuire:COUNt 17'
     # *ESE does not disable bits in ESR, just their reporting to STB
     # need to use our own mask
-    esr_mask = 60
+    esr_mask = 61
     # note that analog & digital channels require different :WAV:FORM commands
-    read_analog_parameters_string = ':WAV:FORM WORD;SOUR CHAN{0:d};PRE?'
+    read_analog_parameters_string = ':WAV:SOUR CHAN{0:d};:WAV:POIN:MODE NORM; :WAV:BYT MSBF;:WAV:FORM WORD; PRE?'
+    # read_analog_parameters_string = ':WAV:FORM WORD;SOUR CHAN{0:d};PRE?'
     read_dig_parameters_string = ':WAV:FORM BYTE;SOUR POD{0:d};PRE?'
     read_waveform_string = ':WAV:DATA?'
     read_counter_string = ':MEAS:{0:s}{1:s}? CHAN{2:d}'
@@ -51,12 +53,19 @@ class KeysightXScopeWorker(VISAWorker):
         # Override the timeout for longer scope waits
         self.connection.timeout = 10000
         
+        
+        #self.connection.write(':ACQuire:TYPE AVERage')
+        #test = self.connection.query( ':ACQuire:TYPE?')
+        #print(test)
+        
         # Query device name to ensure supported scope
         ident_string = self.connection.query('*IDN?')
-        if ('KEYSIGHT' in ident_string) and any(sub in ident_string for sub in self.model_ident):
-            # Scope supported!
-            # If scope is a DSO-X 1000 series, need to use alternate digitize_command for some reason
-            if 'DSO-X 1' in ident_string:
+        print(ident_string)
+        if any(sub in ident_string for sub in self.model_ident):
+            print("Scope supported!")
+            #If scope is a DSO-X 1000 series, need to use alternate digitize_command for some reason
+            if 'DSO-XY' in ident_string:
+                print('test')
                 self.dig_command = ':SING'
         else:
             raise LabscriptError('Device {0:s} with VISA name {0:s} not supported!'.format(ident_string,self.VISA_name))  
@@ -74,9 +83,12 @@ class KeysightXScopeWorker(VISAWorker):
         data = None
         refresh = False
         send_trigger = False
+    
+        
         with h5py.File(h5file,'r') as hdf5_file:
             group = hdf5_file['/devices/'+device_name]
             device_props = labscript_utils.properties.get(hdf5_file,device_name,'device_properties')
+            print("group",np.array(group))
             if 'COUNTERS' in group:
                 data = group['COUNTERS'][:]
             if len(group):
@@ -87,14 +99,17 @@ class KeysightXScopeWorker(VISAWorker):
                             'shuffle':device_props['shuffle']}
 
         if data is not None:
+            print("data")
             #check if refresh needed
             if not fresh:
                 try:
                     refresh = not np.all(np.equal(data,self.smart_cache['COUNTERS']))
+                    print("smartcache")
                 except ValueError:
                     # arrays not of same size
                     refresh = True
             if fresh or refresh:
+                print("fresh")
                 for connection,typ,pol in data:
                     chan_num = int(connection.split(' ')[-1])
                     self.connection.write(':MEAS:{0:s}{1:s} CHAN{2:d}'.format(pol,typ,chan_num))
@@ -102,6 +117,7 @@ class KeysightXScopeWorker(VISAWorker):
                     self.smart_cache['COUNTERS'] = data
         
         if send_trigger:            
+            print("send_trigger")
             # put scope into single mode
             # necessary since :WAV:DATA? clears data and wait for fresh data
             # when in continuous run mode
@@ -110,6 +126,8 @@ class KeysightXScopeWorker(VISAWorker):
         return self.final_values        
             
     def transition_to_manual(self,abort = False):
+
+        
         if not abort:         
             with h5py.File(self.h5_file,'r') as hdf5_file:
                 # get acquisitions table values so we can close the file
@@ -153,7 +171,7 @@ class KeysightXScopeWorker(VISAWorker):
                     channel_num = int(connection.decode('UTF-8').split(' ')[-1])
                     # read an analog channel
                     # use larger chunk size for faster large data reads
-                    [form,typ,Apts,cnt,Axinc,Axor,Axref,yinc,yor,yref] = self.connection.query_ascii_values(self.read_analog_parameters_string.format(channel_num))
+                    [form,typ,Apts,cnt,Axinc,Axor,Axref,yinc,yor,yref] = self.connection.query_ascii_values(self.read_analog_parameters_string.format(channel_num))                 
                     if Apts*2+11 >= 400000:   # Note that +11 accounts for IEEE488.2 waveform header, not true in unicode (ie Python 3+)
                         default_chunk = self.connection.chunk_size
                         self.connection.chunk_size = int(Apts*2+11)
@@ -263,7 +281,7 @@ class KeysightXScopeWorker(VISAWorker):
         # Scope don't say anything useful in the stb, 
         # using the event register instead
         esr = int(self.connection.query('*ESR?'))
-
+        #print("esr",esr,idn)
         # if esr is non-zero, read out the error message and report
         if (esr & self.esr_mask) != 0:
             # read out errors from queue until response == 0
@@ -276,5 +294,5 @@ class KeysightXScopeWorker(VISAWorker):
                     break
                 
             raise LabscriptError('Keysight Scope VISA device {0:s} has Errors in Queue: \n{1:s}'.format(self.VISA_name,err_string)) 
-        return self.convert_register(esr)
+        return self.convert_register(0)
 
