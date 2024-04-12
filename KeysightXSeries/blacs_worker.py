@@ -19,12 +19,12 @@ import labscript_utils.h5_lock, h5py
 class KeysightXScopeWorker(VISAWorker):   
     # define instrument specific read and write strings
     # setup_string = '*ESE 61;*SRE 32;*CLS;:WAV:BYT MSBF;UNS ON;POIN:MODE RAW; :ACQuire:TYPE AVERage; :ACQuire:COUNt 17'
-    setup_string = '*ESE 61;*SRE 32;*CLS;:ACQuire:TYPE NORM;:CHANnel1:DISPlay 1;:CHANnel2:DISPlay 1;:CHANnel3:DISPlay 1;:CHANnel4:DISPlay 1;:ACQuire:COUNt 17'
+    setup_string = '*ESE 61;*SRE 32;*CLS;:ACQuire:TYPE NORMal;:CHANnel1:DISPlay 1;:CHANnel2:DISPlay 1;:CHANnel3:DISPlay 1;:CHANnel4:DISPlay 1;:ACQuire:COUNt 20;:CHANnel1:PROBe 1;:CHANnel2:PROBe 1;:CHANnel3:PROBe 1;:CHANnel4:PROBe 1'
     # *ESE does not disable bits in ESR, just their reporting to STB
     # need to use our own mask
     esr_mask = 61
     # note that analog & digital channels require different :WAV:FORM commands
-    read_analog_parameters_string = ':WAV:SOUR CHAN{0:d};:WAV:POIN:MODE NORM; :WAV:BYT MSBF;:WAV:FORM WORD; PRE?'
+    read_analog_parameters_string = ':WAV:SOUR CHAN{0:d}; :WAV:POIN 5000;:WAV:POIN:MODE NORM; :WAV:BYT MSBF;:WAV:FORM WORD; PRE?'
     # read_analog_parameters_string = ':WAV:FORM WORD;SOUR CHAN{0:d};PRE?'
     read_dig_parameters_string = ':WAV:FORM BYTE;SOUR POD{0:d};PRE?'
     read_waveform_string = ':WAV:DATA?'
@@ -45,7 +45,7 @@ class KeysightXScopeWorker(VISAWorker):
     def error_parser(self,error_return_string):
         '''Parses the strings returned by :SYST:ERR?
         Returns int_code, err_string'''
-        return int(error_return_string.split(',')[0]), error_return_string        
+        return int(error_return_string.split(',')[0]), error_return_string
     
     def init(self):
         # Call the VISA init to initialise the VISA connection
@@ -68,12 +68,24 @@ class KeysightXScopeWorker(VISAWorker):
                 print('test')
                 self.dig_command = ':SING'
         else:
-            raise LabscriptError('Device {0:s} with VISA name {0:s} not supported!'.format(ident_string,self.VISA_name))  
+            raise LabscriptError('Device {0:s} with VISA name {0:s} not supported!'.format(ident_string,self.VISA_name))
         
         # initialization stuff
         self.connection.write(self.setup_string)
         # initialize smart cache
-        self.smart_cache = {'COUNTERS': None}            
+        self.smart_cache = {'COUNTERS': None}
+        
+    def set_aqcuisition_type(self,aqtype:str):
+        if aqtype == 'NORMal' or aqtype == 'AVERage':
+            self.connection.write(':ACQuire:TYPE {}'.format(aqtype))
+        else:
+            raise LabscriptError('Aqcuire type {} is not a valid type or not supported by this implementation yet'.format(aqtype))
+        
+    def set_averaging_number(self,number:int):
+        if number > 0:
+            self.connection.write(':ACQuire:COUNt {}'.format(number))
+        else:
+            raise LabscriptError('Please select a number greater than zero as averaging number!')
         
     def transition_to_buffered(self,device_name,h5file,initial_values,fresh):
         '''This configures counters, if any are defined, 
@@ -277,22 +289,22 @@ class KeysightXScopeWorker(VISAWorker):
         return True
         
     def check_status(self):
-        '''Periodically called by BLACS to check to status of the scope.'''
-        # Scope don't say anything useful in the stb, 
-        # using the event register instead
-        esr = int(self.connection.query('*ESR?'))
-        #print("esr",esr,idn)
-        # if esr is non-zero, read out the error message and report
-        if (esr & self.esr_mask) != 0:
-            # read out errors from queue until response == 0
-            err_string = ''
-            while True:
-                code, return_string = self.error_parser(self.connection.query(':SYST:ERR?'))
-                if code != 0:
-                    err_string += return_string
-                else:
-                    break
+        # '''Periodically called by BLACS to check to status of the scope.'''
+        # # Scope don't say anything useful in the stb, 
+        # # using the event register instead
+        # esr = int(self.connection.query('*ESR?'))
+        # #print("esr",esr,idn)
+        # # if esr is non-zero, read out the error message and report
+        # if (esr & self.esr_mask) != 0:
+        #     # read out errors from queue until response == 0
+        #     err_string = ''
+        #     while True:
+        #         code, return_string = self.error_parser(self.connection.query(':SYST:ERR?'))
+        #         if code != 0:
+        #             err_string += return_string
+        #         else:
+        #             break
                 
-            raise LabscriptError('Keysight Scope VISA device {0:s} has Errors in Queue: \n{1:s}'.format(self.VISA_name,err_string)) 
+        #     raise LabscriptError('Keysight Scope VISA device {0:s} has Errors in Queue: \n{1:s}'.format(self.VISA_name,err_string)) 
         return self.convert_register(0)
 
