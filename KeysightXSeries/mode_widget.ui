@@ -70,26 +70,26 @@
      <item>
       <widget class="QComboBox" name="cb_source">
        <property name="currentText">
-        <string>1</string>
+        <string>Channel1</string>
        </property>
        <item>
         <property name="text">
-         <string>1</string>
+         <string>Channel1</string>
         </property>
        </item>
        <item>
         <property name="text">
-         <string>2</string>
+         <string>Channel2</string>
         </property>
        </item>
        <item>
         <property name="text">
-         <string>3</string>
+         <string>Channel3</string>
         </property>
        </item>
        <item>
         <property name="text">
-         <string>4</string>
+         <string>Channel4</string>
         </property>
        </item>
        <item>

@@ -14,13 +14,17 @@ from blacs.tab_base_classes import define_state, MODE_MANUAL
 from qtutils import UiLoader
 from qtutils.qt.QtGui import QIcon
 import os
+import numpy as np
 
 def parse_SI(si_string):
     split = si_string.split(" ")
     value = int(split[0])
-    suffix = "nµms".split(split[1])
+    suffix = "nµms".split(split[1][0])
     exp = -3*len(suffix[1])
-    return value*10**exp
+    return np.round(value*10**exp,-exp+1)
+def NR3(number):
+    num = "{:.1E}".format(float(number))
+    return num
 
 class KeysightXScopeTab(VISATab):
     ICON_CROSS = ':qtutils/fugue/cross'
@@ -76,7 +80,8 @@ class KeysightXScopeTab(VISATab):
                 lambda: self.activate_mode(
                         str(mode.cb_source.currentText()), 
                         str(mode.cb_timescale.currentText()), 
-                        str(mode.dsb_yzero.value()))
+                        mode.dsb_yzero.value()
+                        )
                 )
         self.mode_list.append(mode)
         self.ui.mode_layout.addWidget(self.mode_list[-1])
@@ -94,11 +99,12 @@ class KeysightXScopeTab(VISATab):
         self.mode_list.pop(index)
         self.update_mode_indices()
         
+    @define_state(MODE_MANUAL, queue_state_indefinitely=True, delete_stale_states=True)
     def activate_mode(self, source, timescale, yzero):
-        timescale = parse_SI(timescale)
-        yzero = yzero*timescale
-        timescale = 10*timescale
-        yield(self.queue_work(self._primary_worker,'set_mode',source,timescale,yzero))
+        ts = parse_SI(timescale)
+        yz = NR3(yzero*ts)
+        rang = NR3(10*timescale)
+        yield(self.queue_work(self._primary_worker,'set_mode',source,rang,yz))
         
     @define_state(MODE_MANUAL, queue_state_indefinitely=True, delete_stale_states=True)
     def change_aq_type(self,index):

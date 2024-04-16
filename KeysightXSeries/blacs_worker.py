@@ -89,9 +89,8 @@ class KeysightXScopeWorker(VISAWorker):
         
     def set_mode(self, source, timescale, yzero):
         self.connection.write(':trigger:source {}'.format(source))
-        self.connection.write(':trigger:source {}'.format(timescale))
+        self.connection.write(':timebase:range {}'.format(timescale))
         self.connection.write(':timebase:position {}'.format(yzero))
-        print(source, timescale, yzero)
         
     def transition_to_buffered(self,device_name,h5file,initial_values,fresh):
         '''This configures counters, if any are defined, 
