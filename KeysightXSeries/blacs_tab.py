@@ -101,9 +101,11 @@ class KeysightXScopeTab(VISATab):
         
     @define_state(MODE_MANUAL, queue_state_indefinitely=True, delete_stale_states=True)
     def activate_mode(self, source, timescale, yzero):
+        print(source,timescale,yzero)
         ts = parse_SI(timescale)
+        print(ts)
         yz = NR3(yzero*ts)
-        rang = NR3(10*timescale)
+        rang = NR3(10*ts)
         yield(self.queue_work(self._primary_worker,'set_mode',source,rang,yz))
         
     @define_state(MODE_MANUAL, queue_state_indefinitely=True, delete_stale_states=True)
