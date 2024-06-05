@@ -58,6 +58,7 @@ class KeysightXScopeTab(VISATab):
         self.combo_aq_type.currentIndexChanged.connect(self.change_aq_type)
         self.spin_avg_nr.valueChanged.connect(self.set_avg_cnt)
         self.ui.button_add_mode.clicked.connect(lambda: self.add_mode(self.ui.mode_label.text()))
+        self.ui.checkBox_Aqcuisition.clicked.connect(self.use_aqc_cb)
         
         self.get_tab_layout().addWidget(self.ui)
         
@@ -116,6 +117,14 @@ class KeysightXScopeTab(VISATab):
         elif aqtype == 'AVERage':
             self.spin_avg_nr.setDisabled(False)
         yield(self.queue_work(self._primary_worker,'set_aqcuisition_type',aqtype))
+        
+    @define_state(MODE_MANUAL, queue_state_indefinitely=True, delete_stale_states=True)
+    def use_aqc_cb(self):
+        #self.ui.checkBox_Aqcuisition.setText("Test!")
+        if self.ui.checkBox_Aqcuisition.isChecked():
+            yield(self.queue_work(self._primary_worker,'change_aqc_state', True))
+        else:
+            yield(self.queue_work(self._primary_worker,'change_aqc_state', False))
         
     @define_state(MODE_MANUAL, queue_state_indefinitely=True, delete_stale_states=True)
     def set_avg_cnt(self,count):

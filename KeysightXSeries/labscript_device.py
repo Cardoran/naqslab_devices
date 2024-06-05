@@ -13,6 +13,7 @@ import numpy as np
 
 from user_devices.naqslab_devices import ScopeChannel, CounterScopeChannel
 from labscript import Device, TriggerableDevice, config, LabscriptError, set_passed_properties
+import h5py
 
 __version__ = '0.1.0'
 __author__ = ['dihm']      
@@ -53,7 +54,9 @@ class KeysightXScope(TriggerableDevice):
         self.allowed_analog_chan = ['Channel {0:d}'.format(i) for i in range(1,num_AI+1)]
         if DI:
             self.allowed_pod1_chan = ['Digital {0:d}'.format(i) for i in range(0,8)]
-            self.allowed_pod2_chan = ['Digital {0:d}'.format(i) for i in range(8,16)]        
+            self.allowed_pod2_chan = ['Digital {0:d}'.format(i) for i in range(8,16)]
+        
+        self.measure_settings = {"time_scale":0, "trigger_source":""}
         
     def generate_code(self, hdf5_file):
         '''Automatically called by compiler to write acquisition instructions
@@ -102,11 +105,21 @@ class KeysightXScope(TriggerableDevice):
         if len(counts_table):
             grp.create_dataset('COUNTERS',compression=config.compression,data=counts_table)
             grp['COUNTERS'].attrs['trigger_time'] = self.trigger_time
+            
+        meas_dtypes = [('time_scale',float),('trigger_source',h5py.special_dtype(vlen=str))]
+        data = np.array((self.measure_settings["time_scale"],
+                         self.measure_settings["trigger_source"]), 
+                        dtype = meas_dtypes)
+        grp.create_dataset('MEAS_SETTINGS', data=data)
                                 
-    def acquire(self,start_time):
+    def acquire(self,start_time, time_scale=None, trigger_source=None):
         '''Call to define time when trigger will happen for scope.'''
         if not self.child_devices:
             raise LabscriptError('No channels acquiring for trigger {0:s}'.format(self.name))
         else:
             self.parent_device.trigger(start_time,self.trigger_duration)
             self.trigger_time = start_time
+        if time_scale != None:
+            self.measure_settings["time_scale"] = time_scale*10
+        if trigger_source != None:
+            self.measure_settings["trigger_source"] = trigger_source

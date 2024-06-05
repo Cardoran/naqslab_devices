@@ -91,6 +91,13 @@ class KeysightXScopeWorker(VISAWorker):
         self.connection.write(':trigger:source {}'.format(source))
         self.connection.write(':timebase:range {}'.format(timescale))
         self.connection.write(':timebase:position {}'.format(yzero))
+        self.connection.write(':run')
+    
+    def change_aqc_state(self, state):
+        if state == True:
+            print("on")
+        else:
+            print("off")
         
     def transition_to_buffered(self,device_name,h5file,initial_values,fresh):
         '''This configures counters, if any are defined, 
@@ -100,7 +107,7 @@ class KeysightXScopeWorker(VISAWorker):
         data = None
         refresh = False
         send_trigger = False
-    
+
         
         with h5py.File(h5file,'r') as hdf5_file:
             group = hdf5_file['/devices/'+device_name]
@@ -114,6 +121,19 @@ class KeysightXScopeWorker(VISAWorker):
             self.comp_settings = {'compression':device_props['compression'],
                             'compression_opts':device_props['compression_opts'],
                             'shuffle':device_props['shuffle']}
+
+            if 'MEAS_SETTINGS' in group:
+                settings = group['MEAS_SETTINGS']
+                print(settings['trigger_source'])
+                try:
+                    self.connection.write(':trigger:source {}'.format(settings['trigger_source'].decode("utf-8")))
+                except:
+                    pass
+                try:
+                    self.connection.write(':timebase:range {}'.format(settings['time_scale']))
+                    self.connection.write(':timebase:position {}'.format(settings['time_scale']*0.3))
+                except:
+                    pass
 
         if data is not None:
             print("data")
@@ -130,6 +150,7 @@ class KeysightXScopeWorker(VISAWorker):
                 for connection,typ,pol in data:
                     chan_num = int(connection.split(' ')[-1])
                     self.connection.write(':MEAS:{0:s}{1:s} CHAN{2:d}'.format(pol,typ,chan_num))
+                    print(':MEAS:{0:s}{1:s} CHAN{2:d}'.format(pol,typ,chan_num))
                     
                     self.smart_cache['COUNTERS'] = data
         
@@ -144,7 +165,7 @@ class KeysightXScopeWorker(VISAWorker):
             
     def transition_to_manual(self,abort = False):
 
-        
+        print("point1")
         if not abort:         
             with h5py.File(self.h5_file,'r') as hdf5_file:
                 # get acquisitions table values so we can close the file
@@ -181,14 +202,18 @@ class KeysightXScopeWorker(VISAWorker):
                     return True
             # close lock on h5 to read from scope, it takes a while
             
+            print("point2")
             data = {}
             # read analog channels if they exist
-            if len(analog_acquisitions):          
+            if len(analog_acquisitions):
+                print(len(analog_acquisitions))
+                print(analog_acquisitions)
                 for connection,label in analog_acquisitions:
                     channel_num = int(connection.decode('UTF-8').split(' ')[-1])
                     # read an analog channel
                     # use larger chunk size for faster large data reads
                     [form,typ,Apts,cnt,Axinc,Axor,Axref,yinc,yor,yref] = self.connection.query_ascii_values(self.read_analog_parameters_string.format(channel_num))                 
+                    print("point5")
                     if Apts*2+11 >= 400000:   # Note that +11 accounts for IEEE488.2 waveform header, not true in unicode (ie Python 3+)
                         default_chunk = self.connection.chunk_size
                         self.connection.chunk_size = int(Apts*2+11)
@@ -196,10 +221,12 @@ class KeysightXScopeWorker(VISAWorker):
                     if Apts*2+11 >= 400000:
                         self.connection.chunk_size = default_chunk
                     data[connection] = self.analog_waveform_parser(raw_data,yor,yinc,yref)
+                    print("point4",data[connection][0])
                 # create the time array
                 data['Analog Time'] = np.arange(Axref,Axref+Apts,1,dtype=np.float64)*Axinc + Axor
+                print("point3")
            
-            # read pod 1 channels if necessary     
+            # read pod 1 channels if necessary
             if len(pod1_acquisitions):
                 # use larger chunk size for faster large data reads
                 [form,typ,Dpts,cnt,Dxinc,Dxor,Dxref,yinc,yor,yref] = self.connection.query_ascii_values(self.read_dig_parameters_string.format(1))
@@ -215,7 +242,7 @@ class KeysightXScopeWorker(VISAWorker):
                     channel_num = int(connection.split(' ')[-1])
                     data[connection] = conv_data[:,(7-channel_num)%8]
                     
-            # read pod 2 channels if necessary     
+            # read pod 2 channels if necessary
             if len(pod2_acquisitions):     
                 # use larger chunk size for faster large data reads
                 [form,typ,Dpts,cnt,Dxinc,Dxor,Dxref,yinc,yor,yref] = self.connection.query_ascii_values(self.read_dig_parameters_string.format(2))
@@ -291,25 +318,27 @@ class KeysightXScopeWorker(VISAWorker):
                         counts.attrs['{0:s}:{1:s}{2:s}'.format(connection,pol,typ)] = count_data[connection]
                         counts.attrs['trigger_time'] = trigger_time                                 
             
+        print("data aqcuired!")
         return True
         
     def check_status(self):
-        # '''Periodically called by BLACS to check to status of the scope.'''
-        # # Scope don't say anything useful in the stb, 
-        # # using the event register instead
-        # esr = int(self.connection.query('*ESR?'))
-        # #print("esr",esr,idn)
-        # # if esr is non-zero, read out the error message and report
-        # if (esr & self.esr_mask) != 0:
-        #     # read out errors from queue until response == 0
-        #     err_string = ''
-        #     while True:
-        #         code, return_string = self.error_parser(self.connection.query(':SYST:ERR?'))
-        #         if code != 0:
-        #             err_string += return_string
-        #         else:
-        #             break
+        '''Periodically called by BLACS to check to status of the scope.'''
+        # Scope don't say anything useful in the stb, 
+        # using the event register instead
+        esr = int(self.connection.query('*ESE?'))
+        #print(esr)
+        #print("esr",esr,idn)
+        # if esr is non-zero, read out the error message and report
+        if (esr & self.esr_mask) != 0:
+            # read out errors from queue until response == 0
+            err_string = ''
+            while True:
+                code, return_string = self.error_parser(self.connection.query(':SYST:ERR?'))
+                if code != 0:
+                    err_string += return_string
+                else:
+                    break
                 
         #     raise LabscriptError('Keysight Scope VISA device {0:s} has Errors in Queue: \n{1:s}'.format(self.VISA_name,err_string)) 
-        return self.convert_register(0)
+        return self.convert_register(esr)
 
