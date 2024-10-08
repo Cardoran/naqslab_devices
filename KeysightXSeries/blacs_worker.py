@@ -124,14 +124,16 @@ class KeysightXScopeWorker(VISAWorker):
 
             if 'MEAS_SETTINGS' in group:
                 settings = group['MEAS_SETTINGS']
-                print(settings['trigger_source'])
                 try:
                     self.connection.write(':trigger:source {}'.format(settings['trigger_source'].decode("utf-8")))
                 except:
                     pass
                 try:
                     self.connection.write(':timebase:range {}'.format(settings['time_scale']))
-                    self.connection.write(':timebase:position {}'.format(settings['time_scale']*0.3))
+                    try:
+                        self.connection.write(':timebase:position {}'.format(settings['time_scale']/10*settings['x0_position']))
+                    except:
+                        pass
                 except:
                     pass
 

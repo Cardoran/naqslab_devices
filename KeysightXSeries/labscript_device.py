@@ -17,7 +17,7 @@ import h5py
 
 __version__ = '0.1.0'
 __author__ = ['dihm']      
-                      
+
 class KeysightXScope(TriggerableDevice):
     description = 'Keysight X Series Digital Oscilliscope'
     allowed_children = [ScopeChannel]
@@ -56,7 +56,7 @@ class KeysightXScope(TriggerableDevice):
             self.allowed_pod1_chan = ['Digital {0:d}'.format(i) for i in range(0,8)]
             self.allowed_pod2_chan = ['Digital {0:d}'.format(i) for i in range(8,16)]
         
-        self.measure_settings = {"time_scale":0, "trigger_source":""}
+        self.measure_settings = {"time_scale":None, "trigger_source":"","x0_position":None}
         
     def generate_code(self, hdf5_file):
         '''Automatically called by compiler to write acquisition instructions
@@ -106,13 +106,14 @@ class KeysightXScope(TriggerableDevice):
             grp.create_dataset('COUNTERS',compression=config.compression,data=counts_table)
             grp['COUNTERS'].attrs['trigger_time'] = self.trigger_time
             
-        meas_dtypes = [('time_scale',float),('trigger_source',h5py.special_dtype(vlen=str))]
+        meas_dtypes = [('time_scale',float),('trigger_source',h5py.special_dtype(vlen=str)),('x0_position',float)]
         data = np.array((self.measure_settings["time_scale"],
-                         self.measure_settings["trigger_source"]), 
-                        dtype = meas_dtypes)
+                         self.measure_settings["trigger_source"],
+                         self.measure_settings["x0_position"]),
+                         dtype = meas_dtypes)
         grp.create_dataset('MEAS_SETTINGS', data=data)
                                 
-    def acquire(self,start_time, time_scale=None, trigger_source=None):
+    def acquire(self,start_time, time_scale=None, trigger_source=None, x0_position=None):
         '''Call to define time when trigger will happen for scope.'''
         if not self.child_devices:
             raise LabscriptError('No channels acquiring for trigger {0:s}'.format(self.name))
@@ -121,5 +122,9 @@ class KeysightXScope(TriggerableDevice):
             self.trigger_time = start_time
         if time_scale != None:
             self.measure_settings["time_scale"] = time_scale*10
+            if x0_position != None:
+                self.measure_settings["x0_position"] = x0_position
+        elif x0_position != None:
+            print("Warning:  y0_position is only used if time_scale is not None!")
         if trigger_source != None:
             self.measure_settings["trigger_source"] = trigger_source
