@@ -19,19 +19,6 @@
      <item>
       <layout class="QVBoxLayout" name="verticalLayout">
        <item>
-        <widget class="QCheckBox" name="checkBox_Aqcuisition">
-         <property name="sizePolicy">
-          <sizepolicy hsizetype="Preferred" vsizetype="Preferred">
-           <horstretch>0</horstretch>
-           <verstretch>0</verstretch>
-          </sizepolicy>
-         </property>
-         <property name="text">
-          <string>Enable Data Aqcuisition</string>
-         </property>
-        </widget>
-       </item>
-       <item>
         <widget class="QLabel" name="label">
          <property name="text">
           <string>Aqcuisition type</string>

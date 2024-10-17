@@ -93,12 +93,6 @@ class KeysightXScopeWorker(VISAWorker):
         self.connection.write(':timebase:position {}'.format(yzero))
         self.connection.write(':run')
     
-    def change_aqc_state(self, state):
-        if state == True:
-            print("on")
-        else:
-            print("off")
-        
     def transition_to_buffered(self,device_name,h5file,initial_values,fresh):
         '''This configures counters, if any are defined, 
         as well as optional compression options for saved data traces.'''
