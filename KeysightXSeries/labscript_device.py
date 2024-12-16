@@ -88,7 +88,10 @@ class KeysightXScope(TriggerableDevice):
                     table[i] = acq
                 grp.create_dataset(acq_group+'_ACQUISITIONS',compression=config.compression,
                                     data=table)
-                grp[acq_group+'_ACQUISITIONS'].attrs['trigger_time'] = self.trigger_time
+                try:
+                    grp[acq_group+'_ACQUISITIONS'].attrs['trigger_time'] = self.trigger_time
+                except:
+                    raise LabscriptError('device has no trigger given! -> self.trigger_time not defined')
                                     
         # now do the counters
         counts = []
