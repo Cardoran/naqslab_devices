@@ -10,13 +10,17 @@
 #                                                                   #
 #####################################################################
 import numpy as np
-from user_devices.naqslab_devices.VISA.blacs_worker import VISAWorker
 from labscript import LabscriptError
 import labscript_utils.properties
 import time
 import labscript_utils.h5_lock, h5py
+import warnings
+from labscript_utils import dedent
+from blacs.tab_base_classes import Worker
 
-class KeysightXScopeWorker(VISAWorker):   
+import pyvisa as visa
+
+class KeysightXScopeWorker(Worker):   
     # define instrument specific read and write strings
     # setup_string = '*ESE 61;*SRE 32;*CLS;:WAV:BYT MSBF;UNS ON;POIN:MODE RAW; :ACQuire:TYPE AVERage; :ACQuire:COUNt 17'
     setup_string = '*ESE 61;*SRE 32;*CLS;:ACQuire:TYPE NORMal;:CHANnel1:DISPlay 1;:CHANnel2:DISPlay 1;:CHANnel3:DISPlay 1;:CHANnel4:DISPlay 1;:ACQuire:COUNt 20;:CHANnel1:PROBe 1;:CHANnel2:PROBe 1;:CHANnel3:PROBe 1;:CHANnel4:PROBe 1'
@@ -49,9 +53,19 @@ class KeysightXScopeWorker(VISAWorker):
     
     def init(self):
         # Call the VISA init to initialise the VISA connection
-        VISAWorker.init(self)
+        """Initializes basic worker and opens VISA connection to device.
+        
+        Default connection timeout is 2 seconds"""    
+        self.VISA_name = self.address
+        self.resourceMan = visa.ResourceManager()
+        try:
+            self.connection = self.resourceMan.open_resource(self.VISA_name)
+        except visa.VisaIOError:
+            msg = '''{:s} not found! Is it connected?'''.format(self.VISA_name)
+            raise LabscriptError(dedent(msg)) from None
+        
         # Override the timeout for longer scope waits
-        self.connection.timeout = 10000
+        self.connection.timeout = 5000
         
         
         #self.connection.write(':ACQuire:TYPE AVERage')
@@ -75,6 +89,11 @@ class KeysightXScopeWorker(VISAWorker):
         # initialize smart cache
         self.smart_cache = {'COUNTERS': None}
         
+        # set osci to auto trigger mode, triggering itself if, after holdoff time 
+        # (should be smaller than timeout) no trigger or not enough triggers arrived.
+        self.connection.write("trigger:sweep auto")
+        self.connection.write("trigger:holdoff 3E0")
+        
     def set_aqcuisition_type(self,aqtype:str):
         if aqtype == 'NORMal' or aqtype == 'AVERage':
             self.connection.write(':ACQuire:TYPE {}'.format(aqtype))
@@ -96,7 +115,14 @@ class KeysightXScopeWorker(VISAWorker):
     def transition_to_buffered(self,device_name,h5file,initial_values,fresh):
         '''This configures counters, if any are defined, 
         as well as optional compression options for saved data traces.'''
-        VISAWorker.transition_to_buffered(self,device_name,h5file,initial_values,fresh)
+        
+        # Store the initial values in case we have to abort and restore them:
+        self.initial_values = initial_values
+        # Store the final values to for use during transition_to_static:
+        self.final_values = {}
+        # Store some parameters for saving data later
+        self.h5_file = h5file
+        self.device_name = device_name
         
         data = None
         refresh = False
@@ -150,7 +176,7 @@ class KeysightXScopeWorker(VISAWorker):
                     
                     self.smart_cache['COUNTERS'] = data
         
-        if send_trigger:            
+        if send_trigger:
             print("send_trigger")
             # put scope into single mode
             # necessary since :WAV:DATA? clears data and wait for fresh data
@@ -160,8 +186,6 @@ class KeysightXScopeWorker(VISAWorker):
         return self.final_values        
             
     def transition_to_manual(self,abort = False):
-
-        print("point1")
         if not abort:         
             with h5py.File(self.h5_file,'r') as hdf5_file:
                 # get acquisitions table values so we can close the file
@@ -198,7 +222,6 @@ class KeysightXScopeWorker(VISAWorker):
                     return True
             # close lock on h5 to read from scope, it takes a while
             
-            print("point2")
             data = {}
             # read analog channels if they exist
             if len(analog_acquisitions):
@@ -208,8 +231,7 @@ class KeysightXScopeWorker(VISAWorker):
                     channel_num = int(connection.decode('UTF-8').split(' ')[-1])
                     # read an analog channel
                     # use larger chunk size for faster large data reads
-                    [form,typ,Apts,cnt,Axinc,Axor,Axref,yinc,yor,yref] = self.connection.query_ascii_values(self.read_analog_parameters_string.format(channel_num))                 
-                    print("point5")
+                    [form,typ,Apts,cnt,Axinc,Axor,Axref,yinc,yor,yref] = self.connection.query_ascii_values(self.read_analog_parameters_string.format(channel_num))
                     if Apts*2+11 >= 400000:   # Note that +11 accounts for IEEE488.2 waveform header, not true in unicode (ie Python 3+)
                         default_chunk = self.connection.chunk_size
                         self.connection.chunk_size = int(Apts*2+11)
@@ -217,10 +239,8 @@ class KeysightXScopeWorker(VISAWorker):
                     if Apts*2+11 >= 400000:
                         self.connection.chunk_size = default_chunk
                     data[connection] = self.analog_waveform_parser(raw_data,yor,yinc,yref)
-                    print("point4",data[connection][0])
                 # create the time array
                 data['Analog Time'] = np.arange(Axref,Axref+Apts,1,dtype=np.float64)*Axinc + Axor
-                print("point3")
            
             # read pod 1 channels if necessary
             if len(pod1_acquisitions):
@@ -338,3 +358,8 @@ class KeysightXScopeWorker(VISAWorker):
         #     raise LabscriptError('Keysight Scope VISA device {0:s} has Errors in Queue: \n{1:s}'.format(self.VISA_name,err_string)) 
         return self.convert_register(esr)
 
+    def program_manual(self, front_panel_values):
+        print(front_panel_values)
+        return {}
+    
+    

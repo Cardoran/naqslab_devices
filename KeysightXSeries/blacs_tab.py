@@ -10,11 +10,12 @@
 #                                                                   #
 #####################################################################
 from user_devices.naqslab_devices.VISA.blacs_tab import VISATab
-from blacs.tab_base_classes import define_state, MODE_MANUAL
+from blacs.tab_base_classes import define_state, MODE_MANUAL, MODE_BUFFERED, MODE_TRANSITION_TO_BUFFERED, MODE_TRANSITION_TO_MANUAL
 from qtutils import UiLoader
 from qtutils.qt.QtGui import QIcon
 import os
 import numpy as np
+from blacs.device_base_class import DeviceTab
 
 def parse_SI(si_string):
     split = si_string.split(" ")
@@ -26,7 +27,7 @@ def NR3(number):
     num = "{:.1E}".format(float(number))
     return num
 
-class KeysightXScopeTab(VISATab):
+class KeysightXScopeTab(DeviceTab):
     ICON_CROSS = ':qtutils/fugue/cross'
     
     # Event Byte Label Definitions for X series scopes
@@ -40,14 +41,14 @@ class KeysightXScopeTab(VISATab):
                           'bit 1':'Unused',
                           'bit 0':'Operation Complete'}
     
-    def __init__(self,*args,**kwargs):
-        if not hasattr(self,'device_worker_class'):
-            self.device_worker_class = 'user_devices.naqslab_devices.KeysightXSeries.blacs_worker.KeysightXScopeWorker'
-        VISATab.__init__(self,*args,**kwargs)
+    # def __init__(self,*args,**kwargs):
+    #     if not hasattr(self,'device_worker_class'):
+    #         self.device_worker_class = 'user_devices.naqslab_devices.KeysightXSeries.blacs_worker.KeysightXScopeWorker'
+    #     # VISATab.__init__(self,*args,**kwargs)
     
     def initialise_GUI(self):
         # Call the VISATab parent to initialise the STB ui and set the worker
-        VISATab.initialise_GUI(self)
+        # VISATab.initialise_GUI(self)
         
         self.mode_list = []
 
@@ -63,8 +64,23 @@ class KeysightXScopeTab(VISATab):
         
         # Set the capabilities of this device
         self.supports_remote_value_check(False)
-        self.supports_smart_programming(True) 
-        self.statemachine_timeout_add(5000, self.status_monitor)
+        # self.supports_smart_programming(True)
+        # self.statemachine_timeout_add(5000, self.status_monitor)
+        
+    def initialise_workers(self):
+        if not hasattr(self,'device_worker_class'):
+            self.device_worker_class = 'user_devices.naqslab_devices.KeysightXSeries.blacs_worker.KeysightXScopeWorker'
+            
+        # Store the VISA name to be used
+        self.address = str(self.settings['connection_table'].find_by_name(self.settings["device_name"]).BLACS_connection)
+        #self.device_name = str(self.settings['device_name'])
+        
+        # Create and set the primary worker
+        self.create_worker("main_worker",
+                            self.device_worker_class,
+                            {'address':self.address,
+                            })
+        self.primary_worker = "main_worker"
         
     def add_mode(self, label, source = 0, timescale = 0, yzero = 0):
         mode = UiLoader().load(os.path.join(os.path.dirname(os.path.realpath(__file__)),'mode_widget.ui'))
@@ -142,4 +158,8 @@ class KeysightXScopeTab(VISATab):
                               mode["timescale"],mode["yzero"])
         except:
             pass
+        return
+    
+    @define_state(MODE_MANUAL|MODE_BUFFERED|MODE_TRANSITION_TO_BUFFERED|MODE_TRANSITION_TO_MANUAL,True)
+    def status_monitor(self):
         return
