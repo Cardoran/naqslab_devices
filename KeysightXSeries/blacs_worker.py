@@ -92,7 +92,7 @@ class KeysightXScopeWorker(Worker):
         # set osci to auto trigger mode, triggering itself if, after holdoff time 
         # (should be smaller than timeout) no trigger or not enough triggers arrived.
         self.connection.write("trigger:sweep auto")
-        self.connection.write("trigger:holdoff 3E0")
+        self.connection.write("trigger:holdoff 40E-9")
         
     def set_aqcuisition_type(self,aqtype:str):
         if aqtype == 'NORMal' or aqtype == 'AVERage':
@@ -127,7 +127,8 @@ class KeysightXScopeWorker(Worker):
         data = None
         refresh = False
         send_trigger = False
-
+        
+        self.connection.write("trigger:holdoff 4E0")
         
         with h5py.File(h5file,'r') as hdf5_file:
             group = hdf5_file['/devices/'+device_name]
@@ -333,7 +334,9 @@ class KeysightXScopeWorker(Worker):
                     for connection,typ,pol in counters:
                         counts.attrs['{0:s}:{1:s}{2:s}'.format(connection,pol,typ)] = count_data[connection]
                         counts.attrs['trigger_time'] = trigger_time                                 
-            
+        
+        self.connection.write("trigger:holdoff 40E-9")
+        
         print("data aqcuired!")
         return True
         
