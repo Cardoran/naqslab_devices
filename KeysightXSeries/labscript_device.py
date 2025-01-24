@@ -27,13 +27,13 @@ class KeysightXScope(TriggerableDevice):
                             "compression","compression_opts","shuffle"]}
         )
     def __init__(self, name, VISA_name, trigger_device, trigger_connection, 
-        num_AI=4, DI=True, trigger_duration=100e-6,
+        num_AI=4, DI=True,
         compression=None, compression_opts=None, shuffle=False, **kwargs):
         '''VISA_name can be full VISA connection string or NI-MAX alias.
         Trigger Device should be fast clocked device. 
         num_AI sets number of analog input channels, default 4
         DI sets if DI are present, default True
-        trigger_duration set scope trigger duration, default 1ms
+        trigger_duration set scope trigger duration, default 100 us
         Compression of traces in h5 file controlled by:
         compression: \'lzf\', \'gzip\', None 
         compression_opts: 0-9 for gzip
@@ -50,7 +50,6 @@ class KeysightXScope(TriggerableDevice):
             self.compression_opts = compression_opts
         self.shuffle = shuffle
         
-        self.trigger_duration = trigger_duration
         self.allowed_analog_chan = ['Channel {0:d}'.format(i) for i in range(1,num_AI+1)]
         if DI:
             self.allowed_pod1_chan = ['Digital {0:d}'.format(i) for i in range(0,8)]
@@ -116,12 +115,13 @@ class KeysightXScope(TriggerableDevice):
                          dtype = meas_dtypes)
         grp.create_dataset('MEAS_SETTINGS', data=data)
                                 
-    def acquire(self,start_time, time_scale=None, trigger_source=None, x0_position=None):
+    def acquire(self,start_time, time_scale=None, trigger_source=None, x0_position=None, trigger_duration=5e-7):
         '''Call to define time when trigger will happen for scope.'''
         if not self.child_devices:
             raise LabscriptError('No channels acquiring for trigger {0:s}'.format(self.name))
         else:
-            self.parent_device.trigger(start_time,self.trigger_duration)
+            print(self.parent_device)
+            self.parent_device.trigger(start_time,trigger_duration)
             self.trigger_time = start_time
         if time_scale != None:
             self.measure_settings["time_scale"] = time_scale*10
