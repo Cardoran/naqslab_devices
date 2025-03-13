@@ -65,7 +65,7 @@ class KeysightXScopeWorker(Worker):
             raise LabscriptError(dedent(msg)) from None
         
         # Override the timeout for longer scope waits
-        self.connection.timeout = 5000
+        self.connection.timeout = 11000
         
         
         #self.connection.write(':ACQuire:TYPE AVERage')
@@ -128,7 +128,7 @@ class KeysightXScopeWorker(Worker):
         refresh = False
         send_trigger = False
         
-        self.connection.write("trigger:holdoff 4E0")
+        self.connection.write("trigger:holdoff 10E0")
         
         with h5py.File(h5file,'r') as hdf5_file:
             group = hdf5_file['/devices/'+device_name]
