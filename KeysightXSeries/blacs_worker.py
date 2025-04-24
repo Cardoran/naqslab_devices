@@ -66,7 +66,7 @@ class KeysightXScopeWorker(Worker):
         
         # Override the timeout for longer scope waits
         self.connection.timeout = 11000
-        
+        self.dig_once = False 
         
         #self.connection.write(':ACQuire:TYPE AVERage')
         #test = self.connection.query( ':ACQuire:TYPE?')
@@ -159,7 +159,7 @@ class KeysightXScopeWorker(Worker):
                     pass
 
         if data is not None:
-            print("data")
+            print("data counters")
             #check if refresh needed
             if not fresh:
                 try:
@@ -183,6 +183,9 @@ class KeysightXScopeWorker(Worker):
             # necessary since :WAV:DATA? clears data and wait for fresh data
             # when in continuous run mode
             self.connection.write(self.dig_command)
+            # if self.dig_once == False:
+            #     self.connection.write(self.dig_command)
+            #     self.dig_once = True
         
         return self.final_values        
             
@@ -225,9 +228,7 @@ class KeysightXScopeWorker(Worker):
             
             data = {}
             # read analog channels if they exist
-            if len(analog_acquisitions):
-                print(len(analog_acquisitions))
-                print(analog_acquisitions)
+            if len(analog_acquisitions) > 0:
                 for connection,label in analog_acquisitions:
                     channel_num = int(connection.decode('UTF-8').split(' ')[-1])
                     # read an analog channel
@@ -244,7 +245,7 @@ class KeysightXScopeWorker(Worker):
                 data['Analog Time'] = np.arange(Axref,Axref+Apts,1,dtype=np.float64)*Axinc + Axor
            
             # read pod 1 channels if necessary
-            if len(pod1_acquisitions):
+            if len(pod1_acquisitions)>0:
                 # use larger chunk size for faster large data reads
                 [form,typ,Dpts,cnt,Dxinc,Dxor,Dxref,yinc,yor,yref] = self.connection.query_ascii_values(self.read_dig_parameters_string.format(1))
                 if Dpts+11 >= 400000:
@@ -260,7 +261,7 @@ class KeysightXScopeWorker(Worker):
                     data[connection] = conv_data[:,(7-channel_num)%8]
                     
             # read pod 2 channels if necessary
-            if len(pod2_acquisitions):     
+            if len(pod2_acquisitions)>0:     
                 # use larger chunk size for faster large data reads
                 [form,typ,Dpts,cnt,Dxinc,Dxor,Dxref,yinc,yor,yref] = self.connection.query_ascii_values(self.read_dig_parameters_string.format(2))
                 if Dpts+11 >= 400000:
